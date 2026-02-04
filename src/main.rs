@@ -1,3 +1,6 @@
+mod util;
+
+use anyhow::ensure;
 use clap::Parser;
 use mithril_client::{
     AggregatorDiscoveryType, ClientBuilder, GenesisVerificationKey, MessageBuilder, MithrilResult,
@@ -28,45 +31,40 @@ async fn main() -> MithrilResult<()> {
 
     let txid = &args.txid;
 
-    // output
+    // Output
     let cardano_transaction_proof = client.cardano_transaction().get_proofs(&[txid]).await?;
 
-    // output
+    // Output
     let certificate = client
         .certificate()
         .verify_chain(&cardano_transaction_proof.certificate_hash)
         .await?;
 
-    println!(
-        "{}",
-        json!({"proof": cardano_transaction_proof, "certificate": certificate})
-    );
-
     // Offline Verification
 
     let verified_transactions = cardano_transaction_proof.verify()?;
 
+    ensure!(
+        verified_transactions
+            .certified_transactions()
+            .iter()
+            .find(|tx| &tx.to_string() == txid)
+            .is_some()
+    );
+
     let message = MessageBuilder::new()
         .compute_cardano_transactions_proofs_message(&certificate, &verified_transactions);
-    assert!(certificate.match_message(&message));
+    ensure!(certificate.match_message(&message));
 
-    eprintln!(
-        r###"Cardano transactions with hashes "'{}'" have been successfully certified by Mithril."###,
-        verified_transactions.certified_transactions().join(","),
-    );
-    if !cardano_transaction_proof
-        .non_certified_transactions
-        .is_empty()
-    {
-        eprintln!(
-            r###"No proof could be computed for Cardano transactions with hashes "'{}'".
+    // Print the Outputs
 
-            Mithril may not have signed those transactions yet, please try again later."###,
-            cardano_transaction_proof
-                .non_certified_transactions
-                .join(","),
-        );
-    }
+    let tx_proof_hex = hex::encode(util::write(&cardano_transaction_proof)?);
+    let cert_hex = hex::encode(util::write(&certificate)?);
+
+    let value = json!({"proof": tx_proof_hex, "certificate": cert_hex});
+
+    println!("{}", serde_yaml::to_string(&value)?);
+    println!();
 
     Ok(())
 }
