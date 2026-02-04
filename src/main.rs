@@ -1,10 +1,19 @@
+use clap::Parser;
 use mithril_client::{
     AggregatorDiscoveryType, ClientBuilder, GenesisVerificationKey, MessageBuilder, MithrilResult,
 };
 use serde_json::json;
 
+#[derive(Parser)]
+#[command(about = "Generate Mithril proofs for Cardano transactions")]
+struct Args {
+    /// Transaction ID (hash) to generate proof for
+    txid: String,
+}
+
 #[tokio::main]
 async fn main() -> MithrilResult<()> {
+    let args = Args::parse();
     const AGGREGATOR_ENDPOINT: &str =
         "https://aggregator.release-mainnet.api.mithril.network/aggregator";
     const GENESIS_VERIFICATION_KEY: &str = "5b3139312c36362c3134302c3138352c3133382c31312c3233372c3230372c3235302c3134342c32372c322c3138382c33302c31322c38312c3135352c3230342c31302c3137392c37352c32332c3133382c3139362c3231372c352c31342c32302c35372c37392c33392c3137365d";
@@ -17,8 +26,7 @@ async fn main() -> MithrilResult<()> {
     .with_origin_tag(Some("EXAMPLE".to_string()))
     .build()?;
 
-    // input
-    let txid = "22d4a83d2e823c28c9d531d135cd12fe8d0d2a33140cac7b446a11888d37ff47";
+    let txid = &args.txid;
 
     // output
     let cardano_transaction_proof = client.cardano_transaction().get_proofs(&[txid]).await?;
