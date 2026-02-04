@@ -26,7 +26,6 @@ async fn main() -> MithrilResult<()> {
     .set_genesis_verification_key(GenesisVerificationKey::JsonHex(
         GENESIS_VERIFICATION_KEY.to_string(),
     ))
-    .with_origin_tag(Some("EXAMPLE".to_string()))
     .build()?;
 
     let txid = &args.txid;
