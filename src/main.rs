@@ -11,7 +11,7 @@ use std::io::{self, Read};
 struct TxProof {
     tx: String,
     proof: String,
-    cert: String,
+    certs: Vec<String>,
 }
 
 #[tokio::main]
@@ -65,7 +65,7 @@ async fn main() -> MithrilResult<()> {
     let output = TxProof {
         tx: tx_hex,
         proof: hex::encode(util::write(&cardano_transaction_proof)?),
-        cert: hex::encode(util::write(&certificate)?),
+        certs: vec![hex::encode(util::write(&certificate)?)],
     };
 
     println!("{}", serde_yaml::to_string(&output)?);
