@@ -1,17 +1,52 @@
 mod util;
 
 use anyhow::ensure;
+use async_trait::async_trait;
+use mithril_aggregator_client::AggregatorHttpClient;
+use mithril_client::certificate_client::{
+    CertificateAggregatorRequest, CertificateClient, MithrilCertificateVerifier,
+};
+use mithril_client::feedback::FeedbackSender;
 use mithril_client::{
-    AggregatorDiscoveryType, ClientBuilder, GenesisVerificationKey, MessageBuilder, MithrilResult,
+    AggregatorDiscoveryType, ClientBuilder, GenesisVerificationKey, MessageBuilder,
+    MithrilCertificate, MithrilCertificateListItem, MithrilResult,
 };
 use serde::Serialize;
+use std::collections::BTreeMap;
 use std::io::{self, Read};
+use std::sync::{Arc, Mutex};
 
 #[derive(Serialize)]
 struct TxProof {
     tx: String,
     proof: String,
     certs: Vec<String>,
+}
+
+struct RecordingCertificateRequest {
+    inner: Arc<dyn CertificateAggregatorRequest>,
+    pub certs: Mutex<BTreeMap<String, MithrilCertificate>>,
+}
+
+#[async_trait]
+impl CertificateAggregatorRequest for RecordingCertificateRequest {
+    async fn list_latest(&self) -> MithrilResult<Vec<MithrilCertificateListItem>> {
+        self.inner.list_latest().await
+    }
+
+    async fn get_by_hash(&self, hash: &str) -> MithrilResult<Option<MithrilCertificate>> {
+        if let Some(cert) = self.certs.lock().unwrap().get(hash).cloned() {
+            return Ok(Some(cert));
+        }
+        let result = self.inner.get_by_hash(hash).await?;
+        if let Some(ref cert) = result {
+            self.certs
+                .lock()
+                .unwrap()
+                .insert(hash.to_string(), cert.clone());
+        }
+        Ok(result)
+    }
 }
 
 #[tokio::main]
@@ -39,9 +74,23 @@ async fn main() -> MithrilResult<()> {
     // Output
     let cardano_transaction_proof = client.cardano_transaction().get_proofs(&[&txid]).await?;
 
-    // Output
-    let certificate = client
-        .certificate()
+    // Build a recording certificate client to capture the full chain
+    let aggregator_http_client = AggregatorHttpClient::builder(AGGREGATOR_ENDPOINT).build()?;
+    let recording = Arc::new(RecordingCertificateRequest {
+        inner: Arc::new(aggregator_http_client),
+        certs: Mutex::new(BTreeMap::new()),
+    });
+    let logger = slog::Logger::root(slog::Discard, slog::o!());
+    let certificate_verifier = MithrilCertificateVerifier::new(
+        recording.clone(),
+        GENESIS_VERIFICATION_KEY,
+        FeedbackSender::new(&[]),
+        logger.clone(),
+    )?;
+    let certificate_client =
+        CertificateClient::new(recording.clone(), Arc::new(certificate_verifier), logger);
+
+    let certificate = certificate_client
         .verify_chain(&cardano_transaction_proof.certificate_hash)
         .await?;
 
@@ -65,7 +114,13 @@ async fn main() -> MithrilResult<()> {
     let output = TxProof {
         tx: tx_hex,
         proof: hex::encode(util::write(&cardano_transaction_proof)?),
-        certs: vec![hex::encode(util::write(&certificate)?)],
+        certs: recording
+            .certs
+            .lock()
+            .unwrap()
+            .values()
+            .map(|cert| util::write(cert).map(hex::encode))
+            .collect::<anyhow::Result<Vec<_>>>()?,
     };
 
     println!("{}", serde_yaml::to_string(&output)?);

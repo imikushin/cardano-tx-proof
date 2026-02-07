@@ -253,6 +253,7 @@ name = "cardano-tx-proof"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "ciborium",
  "ciborium-io",
  "hex",
@@ -262,6 +263,7 @@ dependencies = [
  "pallas",
  "serde",
  "serde_yaml",
+ "slog",
  "tokio",
 ]
 

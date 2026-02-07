@@ -6,6 +6,7 @@ license = "MIT"
 
 [dependencies]
 anyhow = { version = "1.0.100" }
+async-trait = { version = "0.1" }
 ciborium = { version = "0.2.2" }
 ciborium-io = "0.2.2"
 hex = { version = "0.4.3" }
@@ -14,5 +15,6 @@ mithril-client = { version = "0.13.2" }
 mithril-common = { version = "0.6.43" }
 pallas = { version = "1.0.0-alpha.4" }
 serde = { version = "1.0.228" }
+slog = { version = "2" }
 serde_yaml = { version = "0.9.34+deprecated" }
 tokio = { version = "1.28.2", features = ["full"] }
